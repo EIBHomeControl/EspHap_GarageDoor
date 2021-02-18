@@ -4,12 +4,19 @@
 ///   garage door functionality should be reviewed and properly implemented
 
 
+#define ENABLE_WEB_SERVER    //if we want to have built in web server /site
+#define ENABLE_OTA  //if Over the air update need  , ENABLE_WEB_SERVER must be defined first
 
 
 #include <Arduino.h>
+
+
 #include "simplesensor.h"
 #include "config.h"
+
+#ifdef ENABLE_OTA
 #include "wifi_ota.h"
+#endif
 
 #ifdef ESP32
 #include <SPIFFS.h>
@@ -20,6 +27,29 @@
 #include <ESP8266mDNS.h>
 #include "coredecls.h"
 #endif
+
+#ifdef ENABLE_WEB_SERVER
+#ifdef ESP8266
+#include <ESP8266WebServer.h>
+ESP8266WebServer server(80);
+#endif
+
+#ifdef ESP32
+#include <WebServer.h>
+WebServer server(80);
+#endif
+#endif
+
+
+#if defined(ESP32) && defined(ENABLE_OTA)
+#include <Update.h>
+#endif
+
+#ifdef ENABLE_WEB_SERVER
+#include "spiffs_webserver.h"
+bool isWebserver_started = false;
+#endif
+
 #include <WiFiManager.h>        //https://github.com/tzapu/WiFiManager
 
 
@@ -36,9 +66,10 @@ extern "C" {
 #ifdef ESP8266
 #include "homekitintegrationcpp.h"
 #endif
-#include <hapfilestorage/hapfilestorage.hpp>
+#include "hapfilestorage/hapfilestorage.hpp"
 
 
+#include "spiffs_webserver.h"
 
 
 homekit_service_t* service_garagedoor = NULL;
@@ -53,8 +84,8 @@ void sensor_callback(uint8_t gpio_num, uint8_t state)
   current_door_state_update_from_sensor();
 }
 
-uint8_t current_door_state = HOMEKIT_CHARACTERISTIC_CURRENT_DOOR_STATE_UNKNOWN;
-uint8_t target_door_state = HOMEKIT_CHARACTERISTIC_TARGET_DOOR_STATE_UNKNOWN;
+uint8_t current_door_state = HOMEKIT_CHARACTERISTIC_CURRENT_DOOR_STATE_OPEN; //HOMEKIT_CHARACTERISTIC_CURRENT_DOOR_STATE_UNKNOWN;
+uint8_t target_door_state = HOMEKIT_CHARACTERISTIC_TARGET_DOOR_STATE_OPEN;//HOMEKIT_CHARACTERISTIC_TARGET_DOOR_STATE_UNKNOWN;
 
 void startwifimanager() {
   WiFiManager wifiManager;
@@ -87,8 +118,13 @@ void setup() {
   pinMode(relay_gpio, OUTPUT);
   Sensor_open.start(sensor_callback);
   Sensor_close.start(sensor_callback);
+
+
   startwifimanager();
+
+#ifdef ENABLE_OTA
   wifi_ota_setup();
+#endif
 
 
   /// now will setup homekit device
@@ -99,10 +135,7 @@ void setup() {
   Serial.print("Free heap: ");
   Serial.println(system_get_free_heap_size());
 
-
   init_hap_storage("/pair.dat");
-
-
 
   /// We will use for this example only one accessory (possible to use a several on the same esp)
   //Our accessory type is light bulb , apple interface will proper show that
@@ -116,6 +149,28 @@ void setup() {
 
   hap_init_homekit_server();
 
+#ifdef ENABLE_WEB_SERVER
+  String strIp = String(WiFi.localIP()[0]) + String(".") + String(WiFi.localIP()[1]) + String(".") +  String(WiFi.localIP()[2]) + String(".") +  String(WiFi.localIP()[3]);
+#ifdef ESP8266
+  if (hap_homekit_is_paired()) {
+#endif
+    Serial.println(PSTR("Setting web server"));
+    SETUP_FILEHANDLES
+//    server.on("/get", handleGetVal);
+//    server.on("/set", handleSetVal);
+    server.begin();
+    Serial.println(String("Web site http://") + strIp);
+    Serial.println(String("File system http://") + strIp + String("/browse"));
+    Serial.println(String("Update http://") + strIp + String("/update"));
+    isWebserver_started = true;
+#ifdef ESP8266
+  } else
+    Serial.println(PSTR("Web server is NOT SET, waiting for pairing"));
+#endif
+
+#endif
+
+
   obstruction_state_set(0);
   current_door_state_update_from_sensor();
 
@@ -126,7 +181,12 @@ void loop() {
   hap_homekit_loop();
 #endif
 
+  if (isWebserver_started)
+    server.handleClient();
+
+#ifdef ENABLE_OTA
   ArduinoOTA.handle();
+#endif
 
   const uint32_t t = millis();
 
@@ -141,6 +201,57 @@ void loop() {
 
 
 }
+bool getSwitchVal() {
+  if (service_garagedoor) {
+    homekit_characteristic_t * ch = homekit_service_characteristic_by_type(service_garagedoor, HOMEKIT_CHARACTERISTIC_ON);
+    if (ch) {
+      return ch->value.bool_value;
+    }
+  }
+  return false;
+}
+
+/*
+void handleGetVal() {
+  server.send(200, FPSTR(TEXT_PLAIN), getSwitchVal() ? "1" : "0");
+}
+void handleSetVal() {
+  if (server.args() != 2) {
+    server.send(505, FPSTR(TEXT_PLAIN), "Bad args");
+    return;
+  }
+  //to do analyze
+  if (server.arg("var") == "ch1") {
+    if (service_garagedoor) {
+
+      homekit_characteristic_t * ch = homekit_service_characteristic_by_type(service_garagedoor, HOMEKIT_CHARACTERISTIC_ON);
+      if (ch) {
+        set_switch(server.arg("val") == "true");
+      }
+    }
+  }
+}*/
+
+/*
+void set_switch(bool val) {
+  Serial.println(String("set_switch:") + String(val ? "True" : "False"));
+  digitalWrite(relay_gpio, val ? HIGH : LOW);
+  //we need notify apple about changes
+
+  if (service_garagedoor) {
+    Serial.println("notify hap");
+    //getting on/off characteristic
+    homekit_characteristic_t * ch = homekit_service_characteristic_by_type(service_garagedoor, HOMEKIT_CHARACTERISTIC_ON);
+    if (ch) {
+
+      if (ch->value.bool_value != val) { //wil notify only if different
+        ch->value.bool_value = val;
+        homekit_characteristic_notify(ch, ch->value);
+      }
+    }
+  }
+}
+*/
 
 void notify_hap() {
 
@@ -251,7 +362,7 @@ void hap_callback_process(homekit_characteristic_t *ch, homekit_value_t value, v
     return;
 
   }
-  
+
   homekit_characteristic_t * ch_currentstate = homekit_service_characteristic_by_type(service_garagedoor, HOMEKIT_CHARACTERISTIC_CURRENT_DOOR_STATE);
   homekit_characteristic_t * ch_targetstate = homekit_service_characteristic_by_type(service_garagedoor, HOMEKIT_CHARACTERISTIC_TARGET_DOOR_STATE);
   homekit_characteristic_t * ch_obstruction = homekit_service_characteristic_by_type(service_garagedoor, HOMEKIT_CHARACTERISTIC_OBSTRUCTION_DETECTED);
