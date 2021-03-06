@@ -1,29 +1,8 @@
+#include <Arduino.h>
+#include "config.h"
+#include "simplesensor.h"
+#include <WiFiManager.h>        //https://github.com/tzapu/WiFiManager
 
-/*#define HOMEKIT_CHARACTERISTIC_CURRENT_DOOR_STATE_OPEN 0
-  #define HOMEKIT_CHARACTERISTIC_CURRENT_DOOR_STATE_CLOSED 1
-  #define HOMEKIT_CHARACTERISTIC_CURRENT_DOOR_STATE_OPENING 2
-  #define HOMEKIT_CHARACTERISTIC_CURRENT_DOOR_STATE_CLOSING 3
-  #define HOMEKIT_CHARACTERISTIC_CURRENT_DOOR_STATE_STOPPED 4
-  #define HOMEKIT_CHARACTERISTIC_CURRENT_DOOR_STATE_UNKNOWN 255
-
-  #define HOMEKIT_CHARACTERISTIC_TARGET_DOOR_STATE_OPEN 0
-  #define HOMEKIT_CHARACTERISTIC_TARGET_DOOR_STATE_CLOSED 1
-  #define HOMEKIT_CHARACTERISTIC_TARGET_DOOR_STATE_UNKNOWN 255
-*/
-//-----------Configuration-----------------------
-
-#define ENABLE_WEB_SERVER true   //if we want to have built in web server /site
-#define ENABLE_OTA  //if Over the air update need
-
-//#define ENABLE_REMOTE_DEBUG //WebServer will be deactivated if enabled!!!
-
-
-#define RELAY_PIN  5
-
-#define OPEN_PIN  14
-#define CLOSE_PIN  4
-
-//---------------------------
 
 #ifdef ENABLE_REMOTE_DEBUG
 #define ENABLE_WEB_SERVER false
@@ -33,10 +12,6 @@
 #endif
 
 
-#include <Arduino.h>
-
-#include "simplesensor.h"
-#include "config.h"
 
 #ifdef ENABLE_OTA
 #include "wifi_ota.h"
@@ -73,8 +48,6 @@ WebServer server(80);
 #include "spiffs_webserver.h"
 bool isWebserver_started = false;
 #endif
-
-#include <WiFiManager.h>        //https://github.com/tzapu/WiFiManager
 
 
 // For reporting heap usage on the serial output every 5 seconds
@@ -280,23 +253,8 @@ void hap_callback_process(homekit_characteristic_t *ch, homekit_value_t value, v
     delay(500); ///????
     // Turn OFF GPIO:
     relay_write(false);
-/*    
-    if (current_door_state == HOMEKIT_CHARACTERISTIC_CURRENT_DOOR_STATE_OPEN) {
-      current_state_set(HOMEKIT_CHARACTERISTIC_CURRENT_DOOR_STATE_CLOSING);
-    } else {
-      current_state_set(HOMEKIT_CHARACTERISTIC_CURRENT_DOOR_STATE_OPENING);
-    }
-    target_door_state = value.int_value;
 
-    //target_state_set(target_door_state);
-    LOG_D("Callback");
-    print_target_door_state();
-    print_current_door_state();
-    // LOG_D("Callback Target door state: %i", target_door_state);
-    // LOG_D("Callback Current door state: %i", current_door_state);
-*/
   }
-
 
 }
 
