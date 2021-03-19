@@ -27,28 +27,9 @@
 #include "coredecls.h"
 #endif
 
-#if ENABLE_WEB_SERVER
-#ifdef ESP8266
-#include <ESP8266WebServer.h>
-ESP8266WebServer server(80);
-#endif
-
-#ifdef ESP32
-#include <WebServer.h>
-WebServer server(80);
-#endif
-#endif
-
-
 #if defined(ESP32) && defined(ENABLE_OTA)
 #include <Update.h>
 #endif
-
-#if ENABLE_WEB_SERVER
-#include "spiffs_webserver.h"
-bool isWebserver_started = false;
-#endif
-
 
 // For reporting heap usage on the serial output every 5 seconds
 //static uint32_t next_heap_millis = 0;
@@ -63,7 +44,8 @@ extern "C" {
 #include "hapfilestorage/hapfilestorage.hpp"
 
 #if ENABLE_WEB_SERVER
-#include "spiffs_webserver.h"
+#include "hapweb/hap_webserver.hpp"
+bool isWebserver_started = false;
 #endif
 
 homekit_service_t* service_garagedoor = NULL;
@@ -177,8 +159,8 @@ void current_door_state_update_from_sensor() {
     }
   }
 
-  current_state_set(currentstate);
   target_state_set(targetstate);
+  current_state_set(currentstate);
 
   print_target_door_state();
   print_current_door_state();
